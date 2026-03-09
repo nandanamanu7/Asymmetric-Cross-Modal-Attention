@@ -10,13 +10,15 @@
 2. [Objectives](#2-objectives)
 3. [Data Sourcing Strategy](#3-data-sourcing-strategy)
 4. [Model Development Approach](#4-model-development-approach)
+    - [Encoder Selection Recommendation](#encoder-selection-recommendation)
+    - [Encoder Freezing Recommendation (Frozen vs Fine-Tuned)](#encoder-freezing-recommendation-frozen-vs-fine-tuned)
 5. [Testing Methodology & Validation Plan](#5-testing-methodology--validation-plan)
+    - [Ablation Studies](#ablation-studies)
 6. [Comparison with Traditional Methods](#6-comparison-with-traditional-methods)
 7. [Multi-Phase Implementation Plan](#7-multi-phase-implementation-plan)
 8. [Required Tools, Libraries & Resources](#8-required-tools-libraries--resources)
-9. [Timeline Estimates](#9-timeline-estimates)
-10. [Risk Assessment & Mitigation](#10-risk-assessment--mitigation)
-11. [Expected Deliverables](#11-expected-deliverables)
+9. [Potential Error Modes](#9-potential-error-modes)
+10. [Expected Deliverables](#10-expected-deliverables)
 
 ### Project Workflow Overview
 
@@ -50,56 +52,6 @@ graph LR
     style G fill:#2ECC71,stroke:#1A9B4E,color:#fff
     style H fill:#2ECC71,stroke:#1A9B4E,color:#fff
 ```
-
----
-
-## 1. Project Overview
-
-### What We're Building
-
-We will implement the **Asymmetric Cross-Modal Attention** framework described in the paper and evaluate it on a real multimodal dataset. The project will demonstrate that modeling directional (asymmetric) interactions between data modalities produces better results than traditional symmetric or simple fusion approaches.
-
-### Scope
-
-Given the constraints of a high school project (Google Colab Pro compute budget, limited time, and prior experience with research-level ML), we will:
-
-- Focus on **one primary multimodal task**: Visual Question Answering (VQA) -- given an image and a question about it, predict the answer.
-- Use **two modalities**: images and text.
-- Implement the asymmetric cross-attention mechanism from scratch in PyTorch.
-- Compare against three baselines: early fusion, late fusion, and symmetric cross-attention.
-- Use a smaller-scale dataset and pre-trained encoders to keep compute requirements manageable.
-
-### Why VQA?
-
-Visual Question Answering is an ideal testbed because:
-- It naturally involves two modalities (image + text question).
-- The interaction is inherently asymmetric: the question tells the model *where* to look in the image, while the image provides the *evidence* to answer the question. These are fundamentally different roles.
-- Well-established datasets and evaluation metrics exist.
-- Results are intuitive and easy to demonstrate (you can show an image, a question, and the model's answer).
-
----
-
-## 2. Objectives
-
-### Primary Objectives
-
-| # | Objective | Success Criteria |
-|---|-----------|-----------------|
-| 1 | Implement the asymmetric cross-modal attention framework | Working PyTorch code that trains without errors |
-| 2 | Train and evaluate on a VQA dataset | Achieve reasonable accuracy (target: within 5-10% of published baselines) |
-| 3 | Implement and compare against 3 baseline methods | Quantitative comparison table with accuracy metrics across all 4 methods |
-| 4 | Demonstrate that asymmetric attention outperforms symmetric and simple fusion approaches | Statistically meaningful improvement on at least one metric |
-| 5 | Visualize attention patterns to show asymmetry | Attention heatmaps showing different patterns for each direction |
-
-### Stretch Objectives (If Time Permits)
-
-| # | Objective | Description |
-|---|-----------|-------------|
-| 6 | Partial encoder fine-tuning | Unfreeze last 1-2 layers of ViT/DistilBERT; compare against fully frozen results |
-| 7 | Modality ablation experiments | Test robustness when one modality is degraded |
-| 8 | Build a simple web demo | Interactive interface where users upload an image and ask questions |
-
----
 
 ## 3. Data Sourcing Strategy
 
@@ -179,15 +131,6 @@ If VQA v2.0 is too large for your setup:
 - Much smaller (~12,000 question-answer pairs, ~1,500 images)
 - Source: [https://www.mpi-inf.mpg.de/departments/computer-vision-and-machine-learning/research/vision-and-language/visual-turing-challenge](https://www.mpi-inf.mpg.de/departments/computer-vision-and-machine-learning/research/vision-and-language/visual-turing-challenge)
 
-### Alternative Dataset: Hateful Memes (for a different task)
-
-If you want to explore a classification task instead:
-- **Facebook Hateful Memes** dataset
-- Task: Classify whether a meme (image + text) is hateful or not
-- Strongly asymmetric: text meaning changes based on image context and vice versa
-- ~10,000 samples (very manageable)
-- Source: [https://ai.meta.com/tools/hatefulmemes/](https://ai.meta.com/tools/hatefulmemes/)
-
 ---
 
 ## 4. Model Development Approach
@@ -251,7 +194,6 @@ tqdm>=4.65.0               # Progress bars
 numpy>=1.24.0
 pandas>=2.0.0
 scikit-learn>=1.2.0        # Metrics
-tensorboard>=2.13.0        # Training monitoring
 ```
 
 #### Step 2: Data Loading & Preprocessing
@@ -344,7 +286,7 @@ The tables below cover the full spectrum of encoder choices from established cla
 | Frontier | **Llama-3.2** *(8B or 70B)* | Auto-regressive LLM (8B–70B params) | Vast generalized world knowledge and robust chain-of-thought reasoning; strong for open-ended semantic understanding. | Decoder-only; requires explicit pooling of hidden states (last-token or mean-pool) in place of a `[CLS]` token; large memory footprint. |
 | Frontier | **Qwen2.5** *(14B or 72B)* | Advanced LLM (14B–72B params) | State-of-the-art open-weight language model; unparalleled text comprehension, multilingual capability, and reasoning depth. | Immense VRAM footprint; multi-GPU recommended even for feature extraction alone. |
 
-#### Recommendation
+#### Encoder Selection Recommendation
 
 The asymmetric cross-attention mechanism operates on **sequences**: it cross-attends between a set of image patch tokens and a set of text word tokens. This architectural requirement is the most important factor when choosing encoders — the image encoder *must* produce spatial patch embeddings (not a single global vector) for the cross-attention to have meaningful spatial structure to attend over. Similarly, the text encoder must output per-token embeddings so the model can learn which words guide attention to which image regions.
 
@@ -370,7 +312,7 @@ With this in mind, and considering the project's Colab Pro compute budget (A100 
 1. Swap the image encoder to **DINOv2 (ViT-L/14)** — dramatically better frozen patch features at 307M params, still comfortable on A100 40GB. Re-run training and compare.
 2. Swap the text encoder to **ModernBERT (Large)** — deeper contextual reasoning, native FlashAttention-2. Pair with DINOv2 for the strongest feasible combination on Colab Pro.
 
-#### Encoder Freezing Strategy: Frozen vs. Fine-Tuned
+#### Encoder Freezing Recommendation (Frozen vs Fine-Tuned)
 
 A critical design decision is whether to **freeze** (fix) the encoder weights during training or **fine-tune** them. Below are two options with pros, cons, and feasibility.
 
@@ -419,8 +361,6 @@ A critical design decision is whether to **freeze** (fix) the encoder weights du
 | **Debugging** | ⭐⭐⭐⭐⭐ Easier (fewer moving parts) | ⭐⭐⭐ Harder |
 
 **Recommendation: Start with Option 1 (Frozen Encoders).**
-
-For a high school project on Colab Pro, **Option 1 is the recommended starting point**:
 
 1. **Implement first** with frozen encoders. Get the asymmetric fusion working and validate that the pipeline trains.
 2. **Baseline results** with frozen encoders are sufficient to compare against the other baselines.
@@ -540,8 +480,7 @@ for epoch in range(config["epochs"]):
 |--------|-----------------|----------------|
 | **Top-1 Accuracy** | % of questions where the top predicted answer is correct | `correct / total` |
 | **Top-5 Accuracy** | % of questions where the correct answer is in the top 5 predictions | Useful when answers are ambiguous |
-| **VQA Accuracy** | Official VQA metric: `min(# humans who gave that answer / 3, 1)` | Accounts for answer ambiguity |
-| **Per-Category Accuracy** | Accuracy broken down by question type (yes/no, number, other) | Reveals strengths/weaknesses |
+| **VQA Accuracy/API** | Official VQA metric: `min(# humans who gave that answer / 3, 1)` | Accounts for answer ambiguity |
 
 ### Validation Strategy
 
@@ -585,60 +524,29 @@ graph TD
 For a subset of test examples, create visualizations showing:
 1. The input image
 2. The question
-3. The model's predicted answer vs. ground truth
-4. Attention heatmaps overlaid on the image (what parts of the image did the model focus on?)
-5. Attention weights over question words (which words were most important?)
+3. Attention heatmaps overlaid on the image, similar to Grad-CAM
+4. Attention weights over question words (which words were most important?)
+
+### Ablation Studies
+
+Test the importance of each component by selectively removing or degrading them:
+
+| Ablation | Purpose | Expected Result |
+|----------|---------|------------------|
+| **Text-only** | Remove image encoder (use no image) | Accuracy should drop significantly |
+| **Image-only** | Remove text encoder (use no question) | Accuracy should drop significantly |
+| **No asymmetry** | Use symmetric instead of asymmetric cross-attention | Asymmetric should outperform symmetric |
+| **Different attention heads** | Compare single head vs. multi-head attention | Multi-head more accurate than single-head |
 
 ---
 
 ## 6. Comparison with Traditional Methods
 
-We will implement and compare **four methods** total:
+We will implement and compare **two methods** total:
 
-Below is a side-by-side view of all four methods. Each diagram highlights the fundamental architectural difference.
+Below is a side-by-side view of the two fusion methods being compared.
 
-### Baseline 1: Early Fusion
-
-```mermaid
-graph LR
-    I1["🖼️ Image<br/>features"] --> CAT["⊕ Concatenate"]
-    T1["📝 Text<br/>features"] --> CAT
-    CAT --> MLP["Shared MLP"] --> A1["🎯 Answer"]
-
-    style I1 fill:#4A90D9,stroke:#2C5F8A,color:#fff
-    style T1 fill:#D94A7A,stroke:#8A2C4F,color:#fff
-    style CAT fill:#95A5A6,stroke:#7F8C8D,color:#fff
-    style MLP fill:#95A5A6,stroke:#7F8C8D,color:#fff
-    style A1 fill:#2ECC71,stroke:#1A9B4E,color:#fff
-```
-
-- Concatenate image and text features at the input level
-- Pass through a shared multi-layer perceptron
-- **Expected weakness**: Loses modality-specific structure
-
-### Baseline 2: Late Fusion
-
-```mermaid
-graph LR
-    I2["🖼️ Image<br/>features"] --> IMLP["Image MLP"] --> IP["Image<br/>prediction"]
-    T2["📝 Text<br/>features"] --> TMLP["Text MLP"] --> TP["Text<br/>prediction"]
-    IP --> AVG["⊕ Average"]
-    TP --> AVG
-    AVG --> A2["🎯 Answer"]
-
-    style I2 fill:#4A90D9,stroke:#2C5F8A,color:#fff
-    style T2 fill:#D94A7A,stroke:#8A2C4F,color:#fff
-    style IMLP fill:#5BA5D9,stroke:#2C5F8A,color:#fff
-    style TMLP fill:#E06B8E,stroke:#8A2C4F,color:#fff
-    style AVG fill:#95A5A6,stroke:#7F8C8D,color:#fff
-    style A2 fill:#2ECC71,stroke:#1A9B4E,color:#fff
-```
-
-- Process each modality independently through separate MLPs
-- Average or concatenate the final predictions
-- **Expected weakness**: Misses cross-modal interactions entirely
-
-### Baseline 3: Symmetric Cross-Attention
+### Baseline: Symmetric Cross-Attention
 
 ```mermaid
 graph LR
@@ -690,15 +598,11 @@ graph LR
 graph TD
     DATA["📊 VQA v2.0 Dataset<br/>(same train/val/test split)"]
 
-    DATA --> M1["Early Fusion"]
-    DATA --> M2["Late Fusion"]
-    DATA --> M3["Symmetric<br/>Cross-Attn"]
-    DATA --> M4["Asymmetric<br/>Cross-Attn"]
+    DATA --> M1["Symmetric<br/>Cross-Attn"]
+    DATA --> M2["Asymmetric<br/>Cross-Attn"]
 
-    M1 --> EVAL["📏 Evaluate All on Same Test Set"]
+    M1 --> EVAL["📏 Evaluate Both on Same Test Set"]
     M2 --> EVAL
-    M3 --> EVAL
-    M4 --> EVAL
 
     EVAL --> QUANT["📊 Quantitative<br/>Comparison Table"]
     EVAL --> QUAL["🔍 Qualitative<br/>Attention Maps"]
@@ -710,122 +614,130 @@ graph TD
 
     style DATA fill:#4A90D9,stroke:#2C5F8A,color:#fff
     style M1 fill:#95A5A6,stroke:#7F8C8D,color:#fff
-    style M2 fill:#95A5A6,stroke:#7F8C8D,color:#fff
-    style M3 fill:#95A5A6,stroke:#7F8C8D,color:#fff
-    style M4 fill:#2ECC71,stroke:#1A9B4E,color:#fff
+    style M2 fill:#2ECC71,stroke:#1A9B4E,color:#fff
     style EVAL fill:#7B68EE,stroke:#4B3BBE,color:#fff
     style REPORT fill:#D94A7A,stroke:#8A2C4F,color:#fff
 ```
 
 ### Comparison Table (Template)
-
-| Method | Type | Top-1 Acc | Top-5 Acc | VQA Acc | Yes/No | Number | Other | # Params |
-|--------|------|-----------|-----------|---------|--------|--------|-------|----------|
-| Early Fusion | Simple baseline | -- | -- | -- | -- | -- | -- | -- |
-| Late Fusion | Simple baseline | -- | -- | -- | -- | -- | -- | -- |
-| Symmetric Cross-Attn | Modern baseline | -- | -- | -- | -- | -- | -- | -- |
-| **Asymmetric Cross-Attn (Ours)** | **Paper's method** | -- | -- | -- | -- | -- | -- | -- |
+| Method | Type | Top-1 Acc | Top-5 Acc | VQA Acc |
+|--------|------|-----------|-----------|---------|
+| Symmetric Cross-Attn | Baseline | -- | -- | -- |
+| Asymmetric Cross-Attn | Paper's method | -- | -- | -- |
 
 ---
 
 ## 7. Multi-Phase Implementation Plan
 
-### Phase 1: Foundation (Weeks 1-2)
+### Learning Resources
+
+Before diving into implementation, review these foundational materials:
+
+- **[PyTorch for Deep Learning](https://learn.deeplearning.ai/specializations/pytorch-for-deep-learning-professional-certificate/lesson/uzzlvwov/building-a-simple-neural-network)** ← Primary focus resource
+- [PyTorch 60 Minute Blitz](https://docs.pytorch.org/tutorials/beginner/deep_learning_60min_blitz.html)
+- [3Blue1Brown: Neural Networks](https://www.youtube.com/playlist?list=PLZHQObOWTQDNU6R1_67000Dx_ZCJB-3pi) (visual intuition)
+- [PyTorch Official Tutorials](https://pytorch.org/tutorials/) (hands-on coding)
+- [Andrej Karpathy: Let's build GPT](https://www.youtube.com/watch?v=kCc8FmEb1nY) (attention mechanism explained)
+
+---
+
+### Phase 1: Foundation
 
 **Goal**: Set up the development environment and understand the building blocks.
 
-| Task | Description | Time Est. |
-|------|-------------|-----------|
-| 1.1 | Install Python, PyTorch, and all dependencies | 2 hours |
-| 1.2 | Learn/review PyTorch basics (tensors, nn.Module, training loops) | 3-5 days |
-| 1.3 | Study the attention mechanism (watch 3Blue1Brown, Andrej Karpathy videos) | 2-3 days |
-| 1.4 | Download and explore the VQA dataset (look at examples, understand format) | 1 day |
-| 1.5 | Write the data loading pipeline (Dataset class, DataLoader) | 2 days |
+**Checklist**:
+- [ ] Install Python 3.10+, PyTorch 2.0+, and all dependencies
+- [ ] Review PyTorch basics (tensors, nn.Module, training loops)
+- [ ] Study the attention mechanism (refer to learning resources)
+- [ ] Download and explore the VQA v2.0 dataset
+- [ ] Write the data loading pipeline (Dataset class, DataLoader)
+- [ ] Create utility functions for data visualization
 
 **Milestone**: Can load and visualize image-question-answer triplets.
 
-**Recommended Learning Resources**:
-- [3Blue1Brown: Neural Networks](https://www.youtube.com/playlist?list=PLZHQObOWTQDNU6R1_67000Dx_ZCJB-3pi) (visual intuition)
-- [Andrej Karpathy: Let's build GPT](https://www.youtube.com/watch?v=kCc8FmEb1nY) (attention mechanism explained)
-- [PyTorch Official Tutorials](https://pytorch.org/tutorials/) (hands-on coding)
-- [The Illustrated Transformer](https://jalammar.github.io/illustrated-transformer/) (visual guide to attention)
+---
 
-### Phase 2: Baseline Models (Weeks 3-4)
+### Phase 2: Baseline Models
 
-**Goal**: Implement the three baseline models and train all three.
+**Goal**: Implement the symmetric baseline model and train it.
 
-| Task | Description | Time Est. |
-|------|-------------|-----------|
-| 2.1 | Implement image encoder (load pre-trained ViT/ResNet, add projection) | 1 day |
-| 2.2 | Implement text encoder (load pre-trained DistilBERT, add projection) | 1 day |
-| 2.3 | Implement Early Fusion baseline | 1 day |
-| 2.4 | Implement Late Fusion baseline | 1 day |
-| 2.5 | Implement Symmetric Cross-Attention baseline | 2 days |
-| 2.6 | Train all three baselines on the small subset (1K examples) | 1-2 days |
-| 2.7 | Debug and verify that all models train correctly (loss decreases) | 1-2 days |
+**Checklist**:
+- [ ] Implement image encoder (load pre-trained ViT-B/16, add projection layer)
+- [ ] Implement text encoder (load pre-trained RoBERTa-Base, add projection layer)
+- [ ] Implement Symmetric Cross-Attention baseline
+- [ ] Train symmetric baseline on the 1K development subset
+- [ ] Debug and verify that the baseline trains correctly (loss decreases)
+- [ ] Generate baseline predictions on validation set
 
-**Milestone**: Three baseline models trained and producing predictions.
+**Milestone**: Symmetric baseline trained and producing predictions.
 
-### Phase 3: Core Implementation (Weeks 5-6)
+---
+
+### Phase 3: Core Implementation
 
 **Goal**: Implement the asymmetric cross-modal attention framework.
 
-| Task | Description | Time Est. |
-|------|-------------|-----------||
-| 3.1 | Implement `CrossAttentionBlock` module | 1-2 days |
-| 3.2 | Implement `AsymmetricCrossModalFusion` module | 1 day |
-| 3.3 | Assemble the full `AsymmetricVQAModel` | 1 day |
-| 3.4 | Write unit tests (verify tensor shapes, attention weight shapes) | 1 day |
-| 3.5 | Train on small subset, debug any issues | 2-3 days |
-| 3.6 | Compare initial results against baselines | 1 day |
+**Checklist**:
+- [ ] Implement `CrossAttentionBlock` module (query from one modality, K/V from other)
+- [ ] Implement `AsymmetricCrossModalFusion` module (two separate cross-attention blocks)
+- [ ] Assemble the full `AsymmetricVQAModel` with encoders, fusion, and classifier
+- [ ] Write unit tests (verify tensor shapes, attention weight dimensions, output shapes)
+- [ ] Train on small subset and debug any issues
+- [ ] Compare initial results against symmetric baseline
 
 **Milestone**: Asymmetric model trains successfully and shows competitive results.
 
-### Phase 4: Full Training & Evaluation (Weeks 7-8)
+---
+
+### Phase 4: Full Training & Evaluation
 
 **Goal**: Train all models on the larger dataset and conduct thorough evaluation.
 
-| Task | Description | Time Est. |
-|------|-------------|-----------||
-| 4.1 | Scale up to 150K-200K training examples | 1 day (setup) |
-| 4.2 | Train all four models with consistent hyperparameters | 3-4 days (GPU time) |
-| 4.3 | Evaluate on test set, compute all metrics | 1 day |
-| 4.4 | Run ablation studies (remove modalities, add noise) | 2 days |
-| 4.5 | Run each model 3 times for statistical significance | 2-3 days (GPU time) |
-| 4.6 | Fill in the comparison table | 1 day |
+**Checklist**:
+- [ ] Prepare 150K-200K training examples dataset
+- [ ] Train both models (symmetric baseline and asymmetric) with consistent hyperparameters
+- [ ] Evaluate on test set and compute all metrics (Top-1 Acc, Top-5 Acc, VQA Accuracy, per-category breakdown)
+- [ ] Run ablation studies (text-only, image-only, no asymmetry, different attention heads)
+- [ ] Run each model multiple times with different random seeds for statistical significance
+- [ ] Compile comparison table with results
 
-**Milestone**: Complete quantitative comparison across all four methods.
+**Milestone**: Complete quantitative comparison across symmetric vs asymmetric methods.
 
-### Phase 5: Visualization & Analysis (Weeks 9-10)
+---
+
+### Phase 5: Visualization & Analysis
 
 **Goal**: Create compelling visualizations and analyze results.
 
-| Task | Description | Time Est. |
-|------|-------------|-----------||
-| 5.1 | Extract and visualize attention weights from both cross-attention blocks | 2 days |
-| 5.2 | Create attention heatmaps overlaid on images | 2 days |
-| 5.3 | Create bar charts comparing all four model accuracies | 1 day |
-| 5.4 | Analyze failure cases and interesting examples | 1-2 days |
-| 5.5 | Write qualitative analysis of attention patterns | 1-2 days |
+**Checklist**:
+- [ ] Extract and visualize attention weights from both cross-attention blocks
+- [ ] Create attention heatmaps overlaid on images (Grad-CAM style)
+- [ ] Generate comparison plots (bar charts, accuracy curves)
+- [ ] Analyze failure cases and interesting examples
+- [ ] Document qualitative insights about attention patterns
+- [ ] Create high-quality figures for presentation
 
 **Milestone**: Publication-quality figures and analysis.
 
-### Phase 6: Documentation & Presentation (Weeks 11-12)
+---
+
+### Phase 6: Documentation & Presentation
 
 **Goal**: Write up findings and prepare presentation.
 
-| Task | Description | Time Est. |
-|------|-------------|-----------||
-| 6.1 | Write project report (introduction, methods, results, conclusion) | 3-4 days |
-| 6.2 | Create presentation slides | 2 days |
-| 6.3 | Build simple demo (optional: Gradio web app) | 2-3 days |
-| 6.4 | Review and polish all deliverables | 1-2 days |
+**Checklist**:
+- [ ] Write project report (introduction, methods, results, conclusion)
+- [ ] Create presentation slides with key findings
+- [ ] Build simple demo (optional: Gradio web app for inference)
+- [ ] Document code with docstrings and comments
+- [ ] Review and polish all deliverables
+- [ ] Prepare project repository for submission
 
 **Milestone**: Complete project ready for submission/presentation.
 
 ---
 
-## 9. Required Tools, Libraries & Resources
+## 8. Required Tools, Libraries & Resources
 
 ### Software
 
@@ -864,8 +776,6 @@ With Colab Pro's A100 40GB and frozen classic-tier encoders, training is signifi
 | Full evaluation (3 seeds × 4 models) | ~30 hrs | ~60 units | 12 training runs total |
 | **Total** | **~44 GPU hours** | **~88 units** | **Fits within ~1 month of Colab Pro** |
 
-> **Note**: Colab Pro provides ~100 compute units/month. A100 usage costs roughly 2 units/hour. The full project fits within a single month's budget if runs are managed carefully. Spread training across 2 months for a comfortable margin.
-
 ```mermaid
 pie title GPU Hours Distribution (~44 total, A100)
     "Full Evaluation (3 seeds × 4 models)" : 30
@@ -878,65 +788,15 @@ pie title GPU Hours Distribution (~44 total, A100)
 
 | Topic | Resources | Priority |
 |-------|-----------|----------|
-| Python programming | AP CS course (already completed) | Done |
 | PyTorch basics | [PyTorch 60-min blitz](https://pytorch.org/tutorials/beginner/deep_learning_60min_blitz.html) | High |
 | Neural networks fundamentals | [3Blue1Brown series](https://www.youtube.com/playlist?list=PLZHQObOWTQDNU6R1_67000Dx_ZCJB-3pi) | High |
-| Attention mechanism | [The Illustrated Transformer](https://jalammar.github.io/illustrated-transformer/) | High |
 | Transfer learning | [HuggingFace course](https://huggingface.co/learn/nlp-course) | Medium |
-| Git version control | [Git basics](https://git-scm.com/book/en/v2) | Medium |
 
 ---
 
-## 10. Timeline Estimates
+ 
 
-### 12-Week Timeline (Recommended)
-
-```mermaid
-gantt
-    title 12-Week Project Timeline
-    dateFormat  YYYY-MM-DD
-    axisFormat  Week %W
-
-    section Phase 1: Foundation
-    Environment setup              :p1a, 2026-03-02, 1w
-    Learn PyTorch + data loading   :p1b, after p1a, 1w
-
-    section Phase 2: Baselines
-    Build encoders + baselines     :p2a, after p1b, 2w
-
-    section Phase 3: Core Model
-    Implement cross-attention       :p3a, after p2a, 1w
-    Assemble & debug full model     :p3b, after p3a, 1w
-
-    section Phase 4: Evaluation
-    Full-scale training (4 models)  :p4a, after p3b, 1w
-    Evaluation & ablations          :p4b, after p4a, 1w
-
-    section Phase 5: Visualization
-    Attention visualization         :p5a, after p4b, 2w
-
-    section Phase 6: Documentation
-    Write report                    :p6a, after p5a, 1w
-    Presentation slides             :p6b, after p6a, 1w
-```
-
-### Compressed 8-Week Timeline (Ambitious)
-
-If time is limited, phases can be compressed:
-- Combine Phases 1-2 into 3 weeks (skip some learning, dive in faster)
-- Phase 3 in 1.5 weeks
-- Phase 4 in 1.5 weeks
-- Phase 5-6 in 2 weeks
-
-### Weekly Time Commitment
-
-- **Recommended**: 8-12 hours per week
-- **Minimum viable**: 5-6 hours per week (will need the full 12 weeks)
-- **Intensive**: 15-20 hours per week (can finish in 8 weeks)
-
----
-
-## 10. Risk Assessment & Mitigation
+## 9. Potential Error Modes
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
@@ -949,15 +809,15 @@ If time is limited, phases can be compressed:
 
 ---
 
-## 11. Expected Deliverables
+## 10. Expected Deliverables
 
 ### Required Deliverables
 
 | # | Deliverable | Format |
 |---|-------------|--------|
 | 1 | **Working codebase** | Python/PyTorch code on GitHub |
-| 2 | **Trained models** | Saved model checkpoints (.pt files) for all 4 methods |
-| 3 | **Comparison table** | Quantitative results across all 4 methods |
+| 2 | **Trained models** | Saved model checkpoints (.pt files) for symmetric and asymmetric methods |
+| 3 | **Comparison table** | Quantitative results for symmetric vs asymmetric methods |
 | 4 | **Attention visualizations** | Heatmap images showing asymmetric patterns |
 | 5 | **Project report** | PDF document (10-15 pages) |
 | 6 | **Presentation slides** | PowerPoint/Google Slides (15-18 slides) |
@@ -982,7 +842,7 @@ asymmetric-cross-modal-attention/
 ├── models/
 │   ├── encoders.py              # Image and text encoders
 │   ├── attention.py             # Cross-attention modules
-│   ├── baselines.py             # Early fusion, late fusion, symmetric
+│   ├── baselines.py             # Symmetric baseline implementation
 │   ├── asymmetric_model.py      # Main asymmetric cross-modal model
 │   └── __init__.py
 ├── training/
