@@ -39,7 +39,7 @@ class ImageEncoder(nn.Module):
             (self.backbone.class_token.expand(x.shape[0], -1, -1), x),
             dim=1,
         )
-        x = x + self.backbone.encoder_pos_embedding
+        # Encoder adds pos_embedding internally; do not add it manually
         x = self.backbone.encoder(x)  # (B, 1 + num_patches, hidden)
         patch_tokens = x[:, 1:, :]  # (B, 196, 768)
         return self.proj(patch_tokens)  # (B, 196, embed_dim)
