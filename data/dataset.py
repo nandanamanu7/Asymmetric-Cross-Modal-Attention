@@ -73,7 +73,11 @@ class VQADataset(Dataset):
                 continue
             for sub in ("train2014", "val2014", ""):
                 d = self.image_dir / sub if sub else self.image_dir
-                for fmt in (f"COCO_{{}}_{iid:012d}.jpg", f"{iid}.jpg", f"{iid:012d}.jpg"):
+                if sub:
+                    fmts = (f"COCO_{sub}_{iid:012d}.jpg", f"{iid}.jpg", f"{iid:012d}.jpg")
+                else:
+                    fmts = (f"COCO_train2014_{iid:012d}.jpg", f"COCO_val2014_{iid:012d}.jpg", f"{iid}.jpg", f"{iid:012d}.jpg")
+                for fmt in fmts:
                     p = d / fmt
                     if p.exists():
                         self.image_paths[iid] = str(p)
