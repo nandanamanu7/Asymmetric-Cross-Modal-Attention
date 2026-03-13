@@ -851,9 +851,3 @@ asymmetric-cross-modal-attention/
     ├── project_report.pdf
     └── presentation.pptx
 ```
-
----
-
-Everything under "(for ideation purposes only)" is just a high-level plan for now. It will be updated as we go.
-
-Also, if we may use T4 GPU for development, and A100 for full training, so that we don't exceed Colab limits.
