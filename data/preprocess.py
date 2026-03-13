@@ -68,7 +68,7 @@ def merge_questions_answers(
     # Index answers by question_id
     qid_to_answers: Dict[int, list] = {}
     for ann in answers:
-        qid = ann.get("question_id", ann.get("question_id"))
+        qid = ann.get("question_id", ann.get("id"))
         ans_list = ann.get("answers", [])
         if isinstance(ans_list, list):
             texts = [
@@ -82,7 +82,7 @@ def merge_questions_answers(
     merged = []
     for q in questions:
         qid = q.get("question_id", q.get("id"))
-        image_id = q.get("image_id", q.get("image_id"))
+        image_id = q.get("image_id", q.get("img_id"))
         question = q.get("question", q.get("question_text", ""))
         ans_list = qid_to_answers.get(qid, [])
         # Majority vote or first that is in vocab
